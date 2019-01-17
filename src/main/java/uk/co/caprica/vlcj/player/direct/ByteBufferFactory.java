@@ -1,15 +1,22 @@
 package uk.co.caprica.vlcj.player.direct;
 
-import sun.misc.Unsafe;
-
+import java.lang.reflect.Field;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import sun.misc.Unsafe;
+
 /**
  * Factory for creating property aligned native byte buffers.
+ * <p>
+ * This class uses "unsafe" API which might be restricted/removed in future JDKs.
+ * <p>
+ * Original credit: http://psy-lob-saw.blogspot.co.uk/2013/01/direct-memory-alignment-in-java.html
  */
-public class ByteBufferFactory {
+final class ByteBufferFactory {
+
+    private static final long addressOffset = getAddressOffset();
 
     /**
      * Alignment suitable for use by LibVLC video callbacks.
@@ -17,34 +24,49 @@ public class ByteBufferFactory {
     private static final int LIBVLC_ALIGNMENT = 32;
 
     /**
-     * Allocate a properly aligned native byte buffer, suitable for use by the LibVLC video
-     * callbacks.
+     * Allocate a properly aligned native byte buffer, suitable for use by the LibVLC video callbacks.
      *
-     * @param capacity size of the buffer
+     * @param capacity required size for the buffer
      * @return aligned byte buffer
      */
-    public static ByteBuffer allocateAlignedBuffer(int capacity) {
+    static ByteBuffer allocateAlignedBuffer(int capacity) {
         return allocateAlignedBuffer(capacity, LIBVLC_ALIGNMENT);
     }
 
     /**
-     * Allocate a property aligned native byte buffer.
-     * <p></p>
-     * Original credit: http://psy-lob-saw.blogspot.co.uk/2013/01/direct-memory-alignment-in-java.html
+     * Get the value of the native address field from the buffer.
      *
-     * @param capacity size of the buffer
-     * @param alignment alignment
+     * @param buffer buffer
+     * @return native address pointer
+     */
+    static long getAddress(ByteBuffer buffer) {
+        return UnsafeAccess.UNSAFE.getLong(buffer, addressOffset);
+    }
+
+    private static long getAddressOffset() {
+        try {
+            return UnsafeAccess.UNSAFE.objectFieldOffset(Buffer.class.getDeclaredField("address"));
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Allocate a property aligned native byte buffer.
+     *
+     * @param capacity required size for the buffer
+     * @param alignment alignment alignment
      * @return aligned byte buffer
      */
-    public static ByteBuffer allocateAlignedBuffer(int capacity, int alignment) {
+    private static ByteBuffer allocateAlignedBuffer(int capacity, int alignment) {
         ByteBuffer result;
         ByteBuffer buffer = ByteBuffer.allocateDirect(capacity + alignment);
         long address = getAddress(buffer);
         if ((address & (alignment - 1)) == 0) {
             buffer.limit(capacity);
             result = buffer.slice().order(ByteOrder.nativeOrder());
-        }
-        else {
+        } else {
             int newPosition = (int) (alignment - (address & (alignment - 1)));
             buffer.position(newPosition);
             buffer.limit(newPosition + capacity);
@@ -53,19 +75,21 @@ public class ByteBufferFactory {
         return result;
     }
 
-    private static final long addressOffset;
-    static {
-        try {
-            addressOffset = Unsafe.getUnsafe().objectFieldOffset(Buffer.class.getDeclaredField("address"));
-//            addressOffset = UnsafeAccess.unsafe.objectFieldOffset(Buffer.class.getDeclaredField("address"));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    private static class UnsafeAccess {
+
+        private static final Unsafe UNSAFE;
+
+        static {
+            try {
+                Field field = Unsafe.class.getDeclaredField("theUnsafe");
+                field.setAccessible(true);
+                UNSAFE = (Unsafe) field.get(null);
+            }
+            catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
+
     }
 
-    public static long getAddress(ByteBuffer buffer) {
-        // steal the value of address field from Buffer, holding the memory address for this ByteBuffer
-        return Unsafe.getUnsafe().getLong(buffer, addressOffset);
-//        return UnsafeAccess.unsafe.getLong(buffer, addressOffset);
-    }
 }

@@ -28,6 +28,7 @@ import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -35,6 +36,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import uk.co.caprica.vlcj.component.DirectMediaPlayerComponent;
+import uk.co.caprica.vlcj.media.Media;
 import uk.co.caprica.vlcj.player.direct.BufferFormat;
 import uk.co.caprica.vlcj.player.direct.BufferFormatCallback;
 import uk.co.caprica.vlcj.player.direct.DirectMediaPlayer;
@@ -157,20 +159,25 @@ public class DirectMediaPlayerComponentTest extends VlcjTest {
      * @param mrl mrl
      */
     private void start(String mrl) {
-        // One line of vlcj code to play the media...
-        mediaPlayerComponent.getMediaPlayer().media().playMedia(mrl);
+        Media media = mediaPlayerComponent.getMediaPlayerFactory().media().newMedia(mrl);
+        mediaPlayerComponent.getMediaPlayer().media().set(media);
+        mediaPlayerComponent.getMediaPlayer().controls().play();
     }
 
     private class TestRenderCallbackAdapter implements RenderCallback {
 
+        private final int[] rgbBuffer = new int[width * height];
+
         private TestRenderCallbackAdapter() {
         }
 
-//        @Override
+        @Override
         public void display(DirectMediaPlayer mediaPlayer, ByteBuffer[] nativeBuffers, BufferFormat bufferFormat) {
-            // FIXME test!
-            int[] rgbBuffer = nativeBuffers[0].asIntBuffer().array();
+            ByteBuffer bb = nativeBuffers[0];
+            IntBuffer ib = bb.asIntBuffer();
+            ib.get(rgbBuffer);
             image.setRGB(0, 0, width, height, rgbBuffer, 0, width);
+
             panel.repaint();
         }
     };
