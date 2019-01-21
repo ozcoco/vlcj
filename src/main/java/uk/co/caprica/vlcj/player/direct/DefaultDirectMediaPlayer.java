@@ -222,7 +222,6 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
                 ByteBuffer buffer = ByteBufferFactory.allocateAlignedBuffer(pitchValues[i] * lineValues[i]);
                 nativeBuffers[i] = buffer;
                 pointers[i] = Pointer.createConstant(ByteBufferFactory.getAddress(buffer));
-//                pointers[i] = Pointer.createConstant(((DirectBuffer) buffer).address());
             }
             logger.trace("format finished");
             return pitchValues.length;
