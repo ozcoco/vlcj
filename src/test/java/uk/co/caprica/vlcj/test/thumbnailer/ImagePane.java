@@ -19,13 +19,10 @@
 
 package uk.co.caprica.vlcj.test.thumbnailer;
 
-import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.net.URL;
 
 /**
  * A panel that paints a background image.
