@@ -32,6 +32,9 @@ import java.nio.ByteBuffer;
  * <p>
  * This is probably the most <em>inefficient</em> implementation possible of a render callback,
  * ordinarily the video data should be written directly to some other construct (like a texture).
+ * <p>
+ * Having said that, the supplied rgbBuffer could be a buffer direct from an image raster, in which case it should be
+ * quite quick.
  */
 public abstract class RenderCallbackAdapter implements RenderCallback {
 
