@@ -58,15 +58,6 @@ public abstract class RenderCallbackAdapter implements RenderCallback {
     }
 
     /**
-     * Get the video data buffer.
-     *
-     * @return video buffer
-     */
-    public final int[] rgbBuffer() {
-        return rgbBuffer;
-    }
-
-    /**
      * Template method invoked when a new frame of video data is ready.
      *
      * @param mediaPlayer media player

@@ -26,7 +26,10 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 
@@ -37,10 +40,7 @@ import javax.swing.SwingUtilities;
 
 import uk.co.caprica.vlcj.component.DirectMediaPlayerComponent;
 import uk.co.caprica.vlcj.media.Media;
-import uk.co.caprica.vlcj.player.direct.BufferFormat;
-import uk.co.caprica.vlcj.player.direct.BufferFormatCallback;
-import uk.co.caprica.vlcj.player.direct.DirectMediaPlayer;
-import uk.co.caprica.vlcj.player.direct.RenderCallback;
+import uk.co.caprica.vlcj.player.direct.*;
 import uk.co.caprica.vlcj.player.direct.format.RV32BufferFormat;
 import uk.co.caprica.vlcj.test.VlcjTest;
 
@@ -143,13 +143,20 @@ public class DirectMediaPlayerComponentTest extends VlcjTest {
             }
         };
 
-        mediaPlayerComponent = new DirectMediaPlayerComponent(bufferFormatCallback, new TestRenderCallbackAdapter());
+        mediaPlayerComponent = new DirectMediaPlayerComponent(bufferFormatCallback, new TestRenderCallbackAdapter(), true);
 
         frame.setContentPane(panel);
 
         frame.setLocation(100, 100);
         frame.pack();
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                mediaPlayerComponent.release();
+                System.exit(0);
+            }
+        });
         frame.setVisible(true);
     }
 
@@ -164,22 +171,17 @@ public class DirectMediaPlayerComponentTest extends VlcjTest {
         mediaPlayerComponent.getMediaPlayer().controls().play();
     }
 
-    private class TestRenderCallbackAdapter implements RenderCallback {
-
-        private final int[] rgbBuffer = new int[width * height];
+    private class TestRenderCallbackAdapter extends RenderCallbackAdapter {
 
         private TestRenderCallbackAdapter() {
+            super (((DataBufferInt) image.getRaster().getDataBuffer()).getData());
         }
 
         @Override
-        public void display(DirectMediaPlayer mediaPlayer, ByteBuffer[] nativeBuffers, BufferFormat bufferFormat) {
-            ByteBuffer bb = nativeBuffers[0];
-            IntBuffer ib = bb.asIntBuffer();
-            ib.get(rgbBuffer);
-            image.setRGB(0, 0, width, height, rgbBuffer, 0, width);
-
+        protected void onDisplay(DirectMediaPlayer mediaPlayer, int[] rgbBuffer) {
             panel.repaint();
         }
+
     };
 
 }

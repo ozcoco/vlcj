@@ -111,7 +111,7 @@ public class DirectTestPlayer extends VlcjTest {
         });
 
         factory = new MediaPlayerFactory();
-        mediaPlayer = factory.mediaPlayers().newDirectMediaPlayer(new TestBufferFormatCallback(), new TestRenderCallback());
+        mediaPlayer = factory.mediaPlayers().newDirectMediaPlayer(new TestBufferFormatCallback(), new TestRenderCallback(), true);
 
         mediaPlayer.media().set(factory.media().newMedia(media));
         mediaPlayer.controls().play();

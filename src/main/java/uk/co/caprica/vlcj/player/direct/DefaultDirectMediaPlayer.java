@@ -19,11 +19,13 @@
 
 package uk.co.caprica.vlcj.player.direct;
 
+import com.sun.jna.NativeLong;
 import com.sun.jna.Pointer;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import uk.co.caprica.vlcj.binding.LibC;
 import uk.co.caprica.vlcj.binding.LibVlc;
 import uk.co.caprica.vlcj.binding.internal.*;
 import uk.co.caprica.vlcj.player.base.DefaultMediaPlayer;
@@ -75,42 +77,47 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
     /**
      * Setup callback.
      * <p>
-     * A hard reference to the callback must be kept otherwise the callback will get garbage
-     * collected and cause a native crash.
+     * A hard reference to the callback must be kept otherwise the callback will get garbage collected and cause a
+     * native crash.
      */
     private final libvlc_video_format_cb setup;
 
     /**
      * Cleanup callback.
      * <p>
-     * A hard reference to the callback must be kept otherwise the callback will get garbage
-     * collected and cause a native crash.
+     * A hard reference to the callback must be kept otherwise the callback will get garbage collected and cause a
+     * native crash.
      */
     private final libvlc_video_cleanup_cb cleanup;
 
     /**
      * Lock callback.
      * <p>
-     * A hard reference to the callback must be kept otherwise the callback will get garbage
-     * collected and cause a native crash.
+     * A hard reference to the callback must be kept otherwise the callback will get garbage collected and cause a
+     * native crash.
      */
     private final libvlc_lock_callback_t lock;
 
     /**
      * Unlock callback.
      * <p>
-     * A hard reference to the callback must be kept otherwise the callback will get garbage
-     * collected and cause a native crash.
+     * A hard reference to the callback must be kept otherwise the callback will get garbage collected and cause a
+     * native crash.
      */
     private final libvlc_unlock_callback_t unlock;
 
     /**
      * Display callback.
      * <p>
-     * A hard reference to the callback must be kept otherwise the callback will get garbage
-     * collected and cause a native crash.
+     * A hard reference to the callback must be kept otherwise the callback will get garbage collected and cause a
+     * native crash.
      */
     private final libvlc_display_callback_t display;
+
+    /**
+     *
+     */
+    private final boolean lockBuffers;
 
     /**
      * Format of the native buffers.
@@ -139,9 +146,10 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
      * @param format pixel format (e.g. RV15, RV16, RV24, RV32, RGBA, YUYV)
      * @param pitch pitch, also known as stride
      * @param renderCallback callback to receive the video frame data
+     * @param lockBuffers
      */
-    public DefaultDirectMediaPlayer(LibVlc libvlc, libvlc_instance_t instance, final String format, final int width, final int height, final int pitch, RenderCallback renderCallback) {
-        this(libvlc, instance, new DefaultBufferFormatCallback(format, width, height, pitch), renderCallback);
+    public DefaultDirectMediaPlayer(LibVlc libvlc, libvlc_instance_t instance, final String format, final int width, final int height, final int pitch, RenderCallback renderCallback, boolean lockBuffers) {
+        this(libvlc, instance, new DefaultBufferFormatCallback(format, width, height, pitch), renderCallback, lockBuffers);
     }
 
     /**
@@ -151,8 +159,9 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
      * @param instance libvlc instance
      * @param bufferFormatCallback callback to set the desired buffer format
      * @param renderCallback callback to receive the video frame data
+     * @param lockBuffers
      */
-    public DefaultDirectMediaPlayer(LibVlc libvlc, libvlc_instance_t instance, BufferFormatCallback bufferFormatCallback, RenderCallback renderCallback) {
+    public DefaultDirectMediaPlayer(LibVlc libvlc, libvlc_instance_t instance, BufferFormatCallback bufferFormatCallback, RenderCallback renderCallback, boolean lockBuffers) {
         super(libvlc, instance);
         this.bufferFormatCallback = bufferFormatCallback;
         this.renderCallback = renderCallback;
@@ -162,6 +171,7 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
         this.lock = new LockCallback();
         this.unlock = new UnlockCallback();
         this.display = new DisplayCallback();
+        this.lockBuffers = lockBuffers;
         // Install the native video callbacks
         libvlc.libvlc_video_set_format_callbacks(mediaPlayerInstance(), setup, cleanup);
         libvlc.libvlc_video_set_callbacks(mediaPlayerInstance(), lock, unlock, display, null);
@@ -188,8 +198,7 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
     }
 
     /**
-     * Implementation of a callback invoked by the native library to set up the
-     * required video buffer characteristics.
+     * Implementation of a callback invoked by the native library to set up the required video buffer characteristics.
      *
      * This callback is invoked when the video format changes.
      */
@@ -199,13 +208,12 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
             logger.debug("format(chroma={},width={},height={})", chroma.getPointer().getString(0), width.getValue(), height.getValue());
             bufferFormat = bufferFormatCallback.getBufferFormat(width.getValue(), height.getValue());
             logger.debug("bufferFormat={}", bufferFormat);
-            if(bufferFormat == null) {
+            if (bufferFormat == null) {
                 throw new IllegalStateException("buffer format can not be null");
             }
             // Set the desired video format properties
             byte[] chromaBytes = bufferFormat.getChroma().getBytes();
-            // Space for these structures is already allocated by libvlc, we
-            // simply fill the existing memory
+            // Space for these structures is already allocated by libvlc, we simply fill the existing memory
             chroma.getPointer().write(0, chromaBytes, 0, chromaBytes.length > 4 ? 4 : chromaBytes.length);
             width.setValue(bufferFormat.getWidth());
             height.setValue(bufferFormat.getHeight());
@@ -213,15 +221,17 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
             int[] lineValues = bufferFormat.getLines();
             pitches.getPointer().write(0, pitchValues, 0, pitchValues.length);
             lines.getPointer().write(0, lineValues, 0, lineValues.length);
-            // Memory must be aligned correctly (on a 32-byte boundary) for the libvlc
-            // API functions (extra bytes are allocated to allow for enough memory if
-            // the alignment needs to be changed)
+            // Memory must be aligned correctly (on a 32-byte boundary) for the libvlc API functions (extra bytes are
+            // allocated to allow for enough memory if the alignment needs to be changed)
             nativeBuffers = new ByteBuffer[bufferFormat.getPlaneCount()];
             pointers = new Pointer[bufferFormat.getPlaneCount()];
-            for(int i = 0; i < bufferFormat.getPlaneCount(); i ++ ) {
+            for (int i = 0; i < bufferFormat.getPlaneCount(); i ++ ) {
                 ByteBuffer buffer = ByteBufferFactory.allocateAlignedBuffer(pitchValues[i] * lineValues[i]);
                 nativeBuffers[i] = buffer;
                 pointers[i] = Pointer.createConstant(ByteBufferFactory.getAddress(buffer));
+                if (lockBuffers) {
+                    LibC.INSTANCE.mlock(pointers[i], new NativeLong(buffer.capacity()));
+                }
             }
             logger.trace("format finished");
             return pitchValues.length;
@@ -229,8 +239,7 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
     }
 
     /**
-     * Implementation of a callback invoked by the native library to clean up
-     * previously allocated video buffers.
+     * Implementation of a callback invoked by the native library to clean up previously allocated video buffers.
      *
      * This callback is invoked when the video buffer is no longer needed.
      */
@@ -238,7 +247,12 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
         @Override
         public void cleanup(Pointer opaque) {
             logger.trace("cleanup");
-            if(nativeBuffers != null) {
+            if (nativeBuffers != null) {
+                if (lockBuffers) {
+                    for (int i = 0; i < nativeBuffers.length; i++) {
+                        LibC.INSTANCE.munlock(pointers[i], new NativeLong(nativeBuffers[i].capacity()));
+                    }
+                }
                 nativeBuffers = null;
             }
             logger.trace("cleanup finished");
@@ -246,8 +260,8 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
     }
 
     /**
-     * Implementation of a callback invoked by the native library to prepare
-     * the video buffer(s) for rendering a video frame.
+     * Implementation of a callback invoked by the native library to prepare the video buffer(s) for rendering a video
+     * frame.
      *
      * This callback is invoked every frame.
      */
@@ -255,8 +269,8 @@ public class DefaultDirectMediaPlayer extends DefaultMediaPlayer implements Dire
         @Override
         public Pointer lock(Pointer opaque, PointerByReference planes) {
             logger.trace("lock");
-            // Acquire the single permit from the semaphore to ensure that the
-            // memory buffer is not trashed while display() is invoked
+            // Acquire the single permit from the semaphore to ensure that the memory buffer is not trashed while
+            // display() is invoked
             logger.trace("acquire");
             semaphore.acquireUninterruptibly();
             logger.trace("acquired");
